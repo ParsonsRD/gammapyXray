@@ -10,6 +10,7 @@ from gammapy.maps import RegionNDMap, MapAxis, RegionGeom, WcsGeom
 from gammapy.irf import EDispKernel, EDispKernelMap
 from .ogip_spectrum_dataset import StandardOGIPDataset
 from gammapy.data import GTI
+from astropy.time import Time
 
 __all__ = ["StandardOGIPDatasetReader"]
 
@@ -159,7 +160,7 @@ class StandardOGIPDatasetReader:
         """Read GTI table from input HDUList"""
         gti = None
         if self.gti_hdu in hdulist:
-            gti = GTI(Table.read(hdulist[self.gti_hdu]))
+            gti = GTI.from_table_hdu(hdulist[self.gti_hdu])
         return gti
 
     @staticmethod
@@ -212,7 +213,7 @@ class StandardOGIPDatasetReader:
             acceptance = pha_meta["BACKSCAL"]
         spectrum_data["acceptance"] = acceptance
 
-        exposure = pha_meta["EXPOSURE"]
+        exposure = pha_meta["EXPOSURE"] 
         spectrum_data["acceptance"] *= exposure
 
         area_scale = 1
@@ -229,7 +230,7 @@ class StandardOGIPDatasetReader:
         data = self.extract_spectrum(pha_table)
         region, wcs = self._read_regions(hdulist)
         gti = self._read_gti(hdulist)
-
+   
         if filenames is None:
             filenames = self.get_filenames(pha_meta=pha_table.meta)
 
@@ -261,6 +262,10 @@ class StandardOGIPDatasetReader:
         grouping_axis = MapAxis.from_energy_edges(edges, interp=energy_axis._interp)
 
         name = make_name(name)
+        t = Table()
+        for n in pha_table.meta:
+            t[n] = [pha_table.meta[n]]
+
         dataset = StandardOGIPDataset(
             name=name,
             counts=counts,
@@ -272,7 +277,7 @@ class StandardOGIPDatasetReader:
             mask_safe=mask_safe,
             grouping_axis=grouping_axis,
             gti=gti,
-            meta_table=pha_table.meta,
+            meta_table=t,
         )
 
         return dataset

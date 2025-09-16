@@ -19,7 +19,7 @@ class SherpaSpectralModel(SpectralModel):
     tag = ["SherpaSpectralModel", "sherpa", "xspec"]
 
     def __init__(
-        self, sherpa_model, integrated=True, default_units=(u.keV, 1 / (u.keV * u.cm ** 2 * u.s))
+        self, sherpa_model, integrated=False, default_units=(u.keV, 1 / (u.keV * u.cm ** 2 * u.s))
     ):
         self.sherpa_model = sherpa_model
         self.default_units = default_units
@@ -32,7 +32,7 @@ class SherpaSpectralModel(SpectralModel):
         for par in self.sherpa_model.pars:
             is_norm = par.name in ["ampl", "norm", "K"]
             parameter = Parameter(
-                name=par.name, value=par.val, frozen=par.frozen, min=par.min, max=par.max, is_norm=is_norm
+                name=par.name, value=par.val, frozen=par.frozen, min=par.min, max=par.max, #is_norm=is_norm
             )
             # TODO: set unit?
             parameters.append(parameter)
@@ -43,7 +43,8 @@ class SherpaSpectralModel(SpectralModel):
         for name, value in kwargs.items():
             setattr(self.sherpa_model, name, value)
 
-    def evaluate(self, energy, **kwargs):
+    def evaluate(self, energy, *args,  **kwargs):
+
         if not isinstance(energy, u.Quantity):
             raise ValueError("The energy must be a Quantity object.")
         else:
@@ -54,20 +55,26 @@ class SherpaSpectralModel(SpectralModel):
         energy = np.array(energy, dtype=float)
         shape = energy.shape
         energy = energy.flatten()
-        energy = np.append(energy, energy[-1] * 2)
+        #energy = np.append(energy, energy[-1] * 2)
+        #energy_inter = np.vstack((energy,energy*1.0001)).ravel('F')
 
-        # Remove duplicate energies by adding a negligible value
+
+        ## Remove duplicate energies by adding a negligible value
         # (otherwise there are problems with some models, e.g. wabs)
-        for idx in range(len(energy) - 1):
-            if energy[idx] == energy[idx + 1]:
-                delta = (energy[idx + 2] - energy[idx + 1]) / 100
-                energy[idx + 1] += delta
+        #for idx in range(len(energy) - 1):
+        #    if np.abs(energy[idx] - energy[idx + 1])< 1e-8:
+        #        delta = (energy[idx + 2] - energy[idx + 1]) / 10
 
+#                energy[idx + 1] += delta
         self._update_sherpa_parameters(**kwargs)
+#        y_ = self.sherpa_model(energy)[:-1]
+        if len(energy) == 1:
+            y_ = self.sherpa_model(np.repeat(energy, 2), np.repeat(energy*1.0001, 2))[0]
+        else:
+            y_ = self.sherpa_model(energy,energy*1.0001)
 
-        y_ = self.sherpa_model(energy)[:-1]
+        #y_ = y_[range(0, len(y_), 2)]
         if self.integrated:
             y_ /= energy[1:] - energy[:-1]
         y_ = y_ * self.default_units[1]
-
         return y_.reshape(shape)
