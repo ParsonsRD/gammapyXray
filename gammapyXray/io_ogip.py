@@ -62,8 +62,12 @@ def from_hdulist(cls, hdulist, hdu1="MATRIX", hdu2="EBOUNDS"):
     table = Table.read(matrix_hdu)
     energy_min = table["ENERG_LO"].quantity
     energy_max = table["ENERG_HI"].quantity
-    # To avoid that min edge is 0
-    # energy_min[0] += 1e-2 * (energy_max[0] - energy_min[0])
+
+    # To avoid that min edge is 0 which will break interpolation in gammapy we
+    # need to skip the first bin if it is zero
+    if energy_min[0] == 0 * energy_min.unit:
+        energy_min[0] += 1e-3 * (energy_max[0] - energy_min[0])
+
     energy_edges = np.append(energy_min.value, energy_max.value[-1]) * energy_min.unit
     energy_true_axis = MapAxis.from_edges(
         energy_edges, name="energy_true", interp="lin"

@@ -154,7 +154,17 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
             return self.grouped.mask
         else:
             return self._mask
-        
+
+    @mask.setter
+    def mask(self, mask):
+        """Combined fit and safe mask"""
+        if self._is_grouped:
+            self.grouped.mask = mask.resample_axis(
+                axis=self.grouping_axis, ufunc=np.logical_and
+            )
+        else:
+            self._mask = mask
+            
     # @property
     # def mask_safe(self):
     #     """Combined fit and safe mask"""
@@ -211,38 +221,6 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
         """Total statistic given the current model parameters without the priors."""
         return self.grouped._fit_statistic.stat_sum_dataset(self.grouped)
     
-    # @property
-    # def counts(self):
-    #     """Counts map"""
-    #     if self._is_grouped:
-    #         return self.grouped.counts
-    #     else:
-    #         return self._counts
-
-    # @counts.setter
-    # def counts(self, counts):
-    #     """Counts map"""
-    #     if self._is_grouped:
-    #         self.grouped.counts = counts
-    #     else:
-    #         self._counts = counts
-        
-    # @property
-    # def data(self):
-    #     """Data vector"""
-    #     if self._is_grouped:
-    #         return self.grouped.data
-    #     else:
-    #         return self._data
-    
-    # @data.setter
-    # def data(self, data):
-    #     """Data vector"""
-    #     if self._is_grouped:
-    #         self.grouped.data = data
-    #     else:
-    #         self._data = data
-
     def plot_fit(
         self,
         ax_spectrum=None,
