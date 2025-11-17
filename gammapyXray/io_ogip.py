@@ -28,19 +28,21 @@ def from_hdulist(cls, hdulist, hdu1="MATRIX", hdu2="EBOUNDS"):
     hdu2 : str, optional
         HDU containing the energy axis information, default, EBOUNDS
     """
+    # Extract the MATRIX HDU and its header
     matrix_hdu = hdulist[hdu1]
     ebounds_hdu = hdulist[hdu2]
 
+    # Initialize the PDF matrix with zeros
     data = matrix_hdu.data
     header = matrix_hdu.header
-
     pdf_matrix = np.zeros([len(data), header["DETCHANS"]], dtype=np.float64)
 
+    # Populate the PDF matrix from the MATRIX HDU data
     for i, l in enumerate(data):
         if l.field("N_GRP"):
             m_start = 0
             for k in range(l.field("N_GRP")):
-
+                # Handle scalar and array cases for F_CHAN and N_CHAN
                 if np.isscalar(l.field("N_CHAN")):
                     f_chan = l.field("F_CHAN")
                     n_chan = l.field("N_CHAN")
@@ -48,34 +50,38 @@ def from_hdulist(cls, hdulist, hdu1="MATRIX", hdu2="EBOUNDS"):
                     f_chan = l.field("F_CHAN")[k]
                     n_chan = l.field("N_CHAN")[k]
 
+                # Fill the PDF matrix with the MATRIX values
                 pdf_matrix[i, f_chan : f_chan + n_chan] = l.field("MATRIX")[
                     m_start : m_start + n_chan
                 ]
                 m_start += n_chan
 
+    # Read energy bounds from the EBOUNDS HDU
     table = Table.read(ebounds_hdu)
     energy_min = table["E_MIN"].quantity
     energy_max = table["E_MAX"].quantity
     energy_edges = np.append(energy_min.value, energy_max.value[-1]) * energy_min.unit
     energy_axis = MapAxis.from_edges(energy_edges, name="energy", interp="lin")
 
+    # Read energy bounds from the MATRIX HDU
     table = Table.read(matrix_hdu)
     energy_min = table["ENERG_LO"].quantity
     energy_max = table["ENERG_HI"].quantity
 
-    # To avoid that min edge is 0 which will break interpolation in gammapy we
-    # need to skip the first bin if it is zero
+    # Adjust the first bin if its minimum edge is zero
     if energy_min[0] == 0 * energy_min.unit:
         energy_min[0] += 1e-3 * (energy_max[0] - energy_min[0])
 
+    # Create the true energy axis
     energy_edges = np.append(energy_min.value, energy_max.value[-1]) * energy_min.unit
     energy_true_axis = MapAxis.from_edges(
         energy_edges, name="energy_true", interp="lin"
     )
 
+    # Return the EnergyDispersion object
     return cls(axes=[energy_true_axis, energy_axis], data=pdf_matrix)
 
-
+# Attach the from_hdulist method to the EDispKernel class
 EDispKernel.from_hdulist = from_hdulist
 
 
@@ -94,6 +100,7 @@ class StandardOGIPDatasetReader:
     tag = "ogip"
 
     def __init__(self, filename, region_hdu="REGION", gti_hdu="GTI"):
+        # Initialize the reader with the filename and optional HDU names
         self.filename = make_path(filename)
         self.region_hdu = region_hdu
         self.gti_hdu = gti_hdu
@@ -113,9 +120,11 @@ class StandardOGIPDatasetReader:
         filename : `Path`
             Valid path
         """
+        # Resolve the path, checking if it exists
         filename = make_path(filename)
 
         if not filename.exists():
+            # Use the parent directory of the reference file if the path is relative
             return self.filename.parent / filename
         else:
             return filename
@@ -134,6 +143,7 @@ class StandardOGIPDatasetReader:
             Dict with filenames of "arffile", "rmffile" (optional)
             and "bkgfile" (optional)
         """
+        # Extract filenames for ARF, RMF, and BKG files from the PHA metadata
         filenames = {"arffile": self.get_valid_path(pha_meta["ANCRFILE"])}
 
         if "BACKFILE" in pha_meta:
@@ -146,13 +156,16 @@ class StandardOGIPDatasetReader:
 
     def _read_regions(self, hdulist):
         """Read region data from an HDUlist."""
+        # Initialize region and WCS as None
         region, wcs = None, None
         if self.region_hdu in hdulist:
+            # Parse the region data from the REGION HDU
             region_table = Table.read(hdulist[self.region_hdu])
             pix_region = Regions.parse(region_table, format="fits")
             pix_region = pix_region.shapes.to_regions()
             wcs = WcsGeom.from_header(region_table.meta).wcs
 
+            # Convert pixel regions to sky regions
             regions = []
             for reg in pix_region:
                 regions.append(reg.to_sky(wcs))
@@ -162,6 +175,7 @@ class StandardOGIPDatasetReader:
 
     def _read_gti(self, hdulist):
         """Read GTI table from input HDUList"""
+        # Read the GTI table if the GTI HDU is present
         gti = None
         if self.gti_hdu in hdulist:
             gti = GTI.from_table_hdu(hdulist[self.gti_hdu])
@@ -169,7 +183,7 @@ class StandardOGIPDatasetReader:
 
     @staticmethod
     def extract_spectrum(pha_table):
-        """extract spectrum data from PHA table.
+        """Extract spectrum data from PHA table.
 
         The input table must follow OGIP format.
         Only Counts spectra are supported (not count rate).
@@ -180,9 +194,11 @@ class StandardOGIPDatasetReader:
         The resulting dataset is rebinned according to the GROUPING
         column.
         """
+        # Initialize a dictionary to store spectrum data
         spectrum_data = {}
         pha_meta = pha_table.meta
 
+        # Validate the PHA file format
         if pha_meta["HDUCLASS"] != "OGIP":
             raise ValueError("Input file is not an OGIP file.")
         if pha_meta["HDUCLAS1"] != "SPECTRUM":
@@ -196,21 +212,24 @@ class StandardOGIPDatasetReader:
             if pha_meta["HDUCLAS4"] == "TYPE:II":
                 raise ValueError("Type II PHA files are not supported.")
 
+        # Extract exposure time and spectrum data
         spectrum_data["livetime"] = pha_meta["EXPOSURE"] * u.s
-
         spectrum_data["channel"] = pha_table["CHANNEL"]
         spectrum_data["counts"] = pha_table["COUNTS"]
 
+        # Extract the safe mask from the QUALITY column if present
         mask_safe = True
         if "QUALITY" in pha_table.columns:
             mask_safe = pha_table["QUALITY"].data == 0
         spectrum_data["mask_safe"] = mask_safe
 
+        # Extract grouping information if present
         grouping = None
         if "GROUPING" in pha_table.columns:
             grouping = pha_table["GROUPING"]
         spectrum_data["grouping"] = grouping
 
+        # Extract BACKSCAL and scale it by the exposure time
         if "BACKSCAL" in pha_table.columns:
             acceptance = pha_table["BACKSCAL"]
         else:
@@ -220,6 +239,7 @@ class StandardOGIPDatasetReader:
         exposure = pha_meta["EXPOSURE"] 
         spectrum_data["acceptance"] *= exposure
 
+        # Extract AREASCAL if present
         area_scale = 1
         if "AREASCAL" in pha_table.columns:
             area_scale = pha_table["AREASCAL"]
@@ -228,48 +248,61 @@ class StandardOGIPDatasetReader:
         return spectrum_data
 
     def read(self, filenames=None, name=None):
+        # Open the PHA file and read the spectrum table
         hdulist = fits.open(self.filename, memmap=False)
         pha_table = Table.read(hdulist["spectrum"])
 
+        # Extract spectrum data, regions, and GTI
         data = self.extract_spectrum(pha_table)
         region, wcs = self._read_regions(hdulist)
         gti = self._read_gti(hdulist)
    
+        # Resolve filenames for ARF, RMF, and BKG files
         if filenames is None:
             filenames = self.get_filenames(pha_meta=pha_table.meta)
 
+        # Read the energy dispersion kernel
         edisp_kernel = EDispKernel.read(filenames["rmffile"])
         energy_axis = edisp_kernel.axes["energy"]
         energy_true_axis = edisp_kernel.axes["energy_true"]
 
+        # Read ARF and BKG tables
         arf_table = Table.read(filenames["arffile"], hdu="SPECRESP")
         bkg_table = Table.read(filenames["bkgfile"])
         data_bkg = self.extract_spectrum(bkg_table)
 
+        # Create the geometry for the dataset
         geom = RegionGeom(region=region, wcs=wcs, axes=[energy_axis])
 
+        # Create RegionNDMap objects for counts, acceptance, and mask_safe
         counts = RegionNDMap(geom=geom, data=data["counts"].data, unit="")
         acceptance = RegionNDMap(geom=geom, data=data["acceptance"], unit="")
         mask_safe = RegionNDMap(geom=geom, data=data["mask_safe"], unit="")
 
+        # Create RegionNDMap objects for background counts and acceptance
         counts_off = RegionNDMap(geom=geom, data=data_bkg["counts"].data, unit="")
         acceptance_off = RegionNDMap(geom=geom, data=data_bkg["acceptance"], unit="")
 
+        # Create the exposure map
         geom_true = RegionGeom(region=region, wcs=wcs, axes=[energy_true_axis])
         exposure = arf_table["SPECRESP"].quantity * data["livetime"]
         exposure = RegionNDMap(geom=geom_true, data=exposure.value, unit=exposure.unit)
 
+        # Create the energy dispersion kernel map
         edisp = EDispKernelMap.from_edisp_kernel(edisp_kernel, geom=exposure.geom)
 
+        # Create the grouping axis
         index = np.where(data["grouping"] == 1)[0]
         edges = np.append(energy_axis.edges[index], energy_axis.edges[-1])
         grouping_axis = MapAxis.from_energy_edges(edges, interp=energy_axis._interp)
 
+        # Generate a unique name for the dataset
         name = make_name(name)
         t = Table()
         for n in pha_table.meta:
             t[n] = [pha_table.meta[n]]
 
+        # Create the StandardOGIPDataset object
         dataset = StandardOGIPDataset(
             name=name,
             counts=counts,
