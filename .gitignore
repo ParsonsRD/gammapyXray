@@ -1,0 +1,13 @@
+.ipynb_checkpoints/tutorial-checkpoint.ipynb
+build/lib/gammapyXray/__init__.py
+build/lib/gammapyXray/io_ogip.py
+build/lib/gammapyXray/models.py
+build/lib/gammapyXray/ogip_spectrum_dataset.py
+build/lib/gammapyXray/tests/__init__.py
+build/lib/gammapyXray/tests/test_models.py
+build/lib/gammapyXray/tests/test_ogip_spectrum_dataset.py
+gammapyXray.egg-info/dependency_links.txt
+gammapyXray.egg-info/PKG-INFO
+gammapyXray.egg-info/requires.txt
+gammapyXray.egg-info/SOURCES.txt
+gammapyXray.egg-info/top_level.txt
