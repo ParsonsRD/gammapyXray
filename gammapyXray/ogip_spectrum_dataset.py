@@ -70,7 +70,7 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
     @property
     def grouped(self):
         """Return grouped SpectrumDatasetOnOff."""
-        #print("gr", self._grouped)
+
         return self._grouped
 
     @property
@@ -80,7 +80,10 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
     def apply_grouping(self, axis=None):
         """Apply grouping."""
         if axis is None:
-            raise ValueError("A grouping MapAxis must be provided.")
+            raise ValueError(
+                "A grouping MapAxis must be provided to apply grouping. "
+                "Ensure you pass a valid MapAxis object to the 'axis' parameter."
+            )
         else:
             dataset = self.to_spectrum_dataset_onoff(name=self.name)
             self._grouped = dataset.resample_energy_axis(
@@ -89,6 +92,7 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
             self._grouped._mask_safe = self.mask_safe.resample_axis(
                 axis=axis, ufunc=np.logical_or
             )
+
     def set_min_true_energy(self, energy):
         """Resamples the true energy axis of the grouped dataset, by eliminating all bins below a given energy.
         Parameters
@@ -96,10 +100,21 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
         energy: `~astropy.units.Quantity`
             Minimum energy (exclusive) for the resampled true energy axis
         """
+        if self.grouped is None:
+            raise RuntimeError(
+                "The dataset must be grouped before setting the minimum true energy. "
+                "Call 'apply_grouping' with a valid MapAxis before using this method."
+            )
+
         edges = self.grouped.geoms["geom_exposure"].axes["energy_true"].edges
         mask = np.where(edges > energy)
-        edges_resampled = edges[mask]
+        if len(mask[0]) == 0:
+            raise ValueError(
+                f"No energy bins remain after applying the minimum energy threshold of {energy}. "
+                "Ensure the threshold is within the range of the true energy axis."
+            )
 
+        edges_resampled = edges[mask]
         resampled_true_energy_axis = MapAxis.from_edges(
             edges_resampled, name="energy_true"
         )
@@ -164,28 +179,6 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
             )
         else:
             self._mask = mask
-            
-    # @property
-    # def mask_safe(self):
-    #     """Combined fit and safe mask"""
-    #     if self._is_grouped:
-    #         return self.grouped.mask_safe
-    #     else:
-    #         return self._mask_safe
-    
-    # @mask_safe.setter
-    # def mask_safe(self, mask_safe):
-    #     """Combined fit and safe mask"""
-    #     #print(mask_safe.resample_axis(
-    #     #        axis=self.grouping_axis, ufunc=np.logical_or
-    #     #    ))
-    #     if self._is_grouped:
-    #         self.grouped.mask_safe = mask_safe.resample_axis(
-    #             axis=self.grouping_axis, ufunc=np.logical_or
-    #         )
-    #     else:
-    #         self._mask_safe = mask_safe
-
         
     def npred(self):
         """Predicted source and background counts
@@ -272,6 +265,12 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
             OGIP PHA file to read
         """
         from .io_ogip import StandardOGIPDatasetReader
+
+        if not filename:
+            raise ValueError(
+                "The 'filename' parameter cannot be empty. "
+                "Provide the path to a valid OGIP PHA file."
+            )
 
         reader = StandardOGIPDatasetReader(filename=filename)
         return reader.read(name=name)
