@@ -74,7 +74,8 @@ class SherpaSpectralModel(SpectralModel):
             y_ = self.sherpa_model(energy,energy*1.0001)
 
         #y_ = y_[range(0, len(y_), 2)]
-        if self.integrated:
-            y_ /= energy[1:] - energy[:-1]
+        #if self.integrated:
+        y_ /= energy*1.0001 - energy
+        
         y_ = y_ * self.default_units[1]
         return y_.reshape(shape)
