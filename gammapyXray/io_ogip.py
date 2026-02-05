@@ -247,7 +247,7 @@ class StandardOGIPDatasetReader:
 
         return spectrum_data
 
-    def read(self, filenames=None, name=None):
+    def read(self, filenames=None, name=None, rebin_factor=1):
         # Open the PHA file and read the spectrum table
         hdulist = fits.open(self.filename, memmap=False)
         pha_table = Table.read(hdulist["spectrum"])
@@ -294,6 +294,9 @@ class StandardOGIPDatasetReader:
         # Create the grouping axis
         index = np.where(data["grouping"] == 1)[0]
         edges = np.append(energy_axis.edges[index], energy_axis.edges[-1])
+        # take every second edge
+        if rebin_factor > 1:
+            edges = edges[::rebin_factor]
         grouping_axis = MapAxis.from_energy_edges(edges, interp=energy_axis._interp)
 
         # Generate a unique name for the dataset

@@ -251,7 +251,7 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
         )
 
     @classmethod
-    def read(cls, filename, name=None):
+    def read(cls, filename, name=None, rebin_factor=1):
         """Read from file
 
         For now, filename is assumed to the name of a PHA file where BKG file, ARF, and RMF names
@@ -273,7 +273,7 @@ class StandardOGIPDataset(SpectrumDatasetOnOff):
             )
 
         reader = StandardOGIPDatasetReader(filename=filename)
-        return reader.read(name=name)
+        return reader.read(name=name, rebin_factor=rebin_factor)
 
     def write(self, filename, overwrite=False, format="ogip"):
         raise NotImplementedError("Standard OGIP writing is not supported.")
